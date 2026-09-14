@@ -1,0 +1,15 @@
+{
+  "id": "happyflora",
+  "displayName": "HappyFlora",
+  "instagram": {
+    "userId": "17841428109720639",
+    "accessTokenEnvVar": "IG_ACCESS_TOKEN_HAPPYFLORA"
+  },
+  "profile": {
+    "description": "Цветочный магазин HappyFlora в Минске — букеты, доставка, оформление на заказ",
+    "targetAudience": "Жители Минска, которые заказывают букеты на подарок или для себя",
+    "tone": "Тёплый, живой, с эмодзи, без канцелярита",
+    "goals": "Продажи через Flowwow, узнаваемость бренда, заявки в директ",
+    "doNotMention": []
+  }
+}

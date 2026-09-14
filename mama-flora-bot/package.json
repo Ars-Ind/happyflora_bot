@@ -1,0 +1,16 @@
+{
+  "name": "mama-flora-bot",
+  "version": "2.0.0",
+  "description": "Telegram-бот с настоящей памятью разговора для ведения Instagram HappyFlora",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "dotenv": "^17.4.2",
+    "cloudinary": "^2.5.1"
+  }
+}
