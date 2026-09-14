@@ -12,19 +12,37 @@ function assertConfigured() {
   }
 }
 
-async function uploadImageAndGetPublicUrl(base64Data, mimetype) {
+// Готовые форматы под Instagram: лента/карусель — 4:5, Reels/Stories — 9:16 (во весь экран)
+const FORMATS = {
+  feed: { width: 1080, height: 1350 },
+  full: { width: 1080, height: 1920 }
+};
+
+async function uploadImageAndGetPublicUrl(base64Data, mimetype, format = 'feed') {
   assertConfigured();
   const mime = mimetype || 'image/jpeg';
   const dataUri = `data:${mime};base64,${base64Data}`;
-  const result = await cloudinary.uploader.upload(dataUri, { folder: 'mama-flora-bot', resource_type: 'image' });
+  const { width, height } = FORMATS[format] || FORMATS.feed;
+
+  const result = await cloudinary.uploader.upload(dataUri, {
+    folder: 'mama-flora-bot',
+    resource_type: 'image',
+    transformation: [{ width, height, crop: 'fill', gravity: 'auto' }]
+  });
   return result.secure_url;
 }
 
-async function uploadVideoAndGetPublicUrl(base64Data, mimetype) {
+async function uploadVideoAndGetPublicUrl(base64Data, mimetype, format = 'full') {
   assertConfigured();
   const mime = mimetype || 'video/mp4';
   const dataUri = `data:${mime};base64,${base64Data}`;
-  const result = await cloudinary.uploader.upload(dataUri, { folder: 'mama-flora-bot', resource_type: 'video' });
+  const { width, height } = FORMATS[format] || FORMATS.full;
+
+  const result = await cloudinary.uploader.upload(dataUri, {
+    folder: 'mama-flora-bot',
+    resource_type: 'video',
+    transformation: [{ width, height, crop: 'fill', gravity: 'auto' }]
+  });
   return result.secure_url;
 }
 
