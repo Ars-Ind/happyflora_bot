@@ -140,7 +140,7 @@ async function executePublishAction(brand, chatId, { caption, is_story }) {
       const imageUrls = [];
       for (const img of pending.images) {
         // eslint-disable-next-line no-await-in-loop
-        const url = await uploadImageAndGetPublicUrl(img.base64, img.mimetype);
+        const url = await uploadImageAndGetPublicUrl(img.base64, img.mimetype, 'feed');
         imageUrls.push(url);
       }
       const result = await publishCarousel(brand, { imageUrls, caption });
@@ -149,7 +149,7 @@ async function executePublishAction(brand, chatId, { caption, is_story }) {
     }
 
     if (pending.type === 'video') {
-      const videoUrl = await uploadVideoAndGetPublicUrl(pending.base64, pending.mimetype);
+      const videoUrl = await uploadVideoAndGetPublicUrl(pending.base64, pending.mimetype, 'full');
       if (is_story) {
         await publishStory(brand, { videoUrl });
         pendingMediaByChat.delete(chatId);
@@ -161,7 +161,7 @@ async function executePublishAction(brand, chatId, { caption, is_story }) {
     }
 
     // одиночное фото
-    const imageUrl = await uploadImageAndGetPublicUrl(pending.base64, pending.mimetype);
+    const imageUrl = await uploadImageAndGetPublicUrl(pending.base64, pending.mimetype, is_story ? 'full' : 'feed');
     if (is_story) {
       await publishStory(brand, { imageUrl });
       pendingMediaByChat.delete(chatId);
