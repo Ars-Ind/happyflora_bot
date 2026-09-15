@@ -1,6 +1,7 @@
 const { Telegraf } = require('telegraf');
 const { getBrandById } = require('./brands');
 const { handleIncomingMessage, setPendingPhoto, setPendingCarousel, setPendingVideo, setNotifier } = require('./claude');
+const { startTokenAutoRefresh } = require('./token-refresh');
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
@@ -150,9 +151,31 @@ setNotifier(async (chatId, text) => {
   await bot.telegram.sendMessage(chatId, text);
 });
 
+function getAllowedUserIds() {
+  return (process.env.ALLOWED_TELEGRAM_USER_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+async function notifyAllAuthorized(text) {
+  const ids = getAllowedUserIds();
+  for (const id of ids) {
+    // eslint-disable-next-line no-await-in-loop
+    await bot.telegram.sendMessage(id, text).catch((err) => {
+      console.error(`Не удалось отправить уведомление пользователю ${id}:`, err.message);
+    });
+  }
+}
+
 async function startBot() {
   await bot.launch();
   console.log('⚡️ Telegram-бот запущен и слушает сообщения!');
+
+  const brand = getBrandById('happyflora');
+  if (brand) {
+    startTokenAutoRefresh(brand, notifyAllAuthorized);
+  }
 }
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
