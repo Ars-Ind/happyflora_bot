@@ -2,20 +2,24 @@ const { Telegraf } = require('telegraf');
 const { getBrandById } = require('./brands');
 const { handleIncomingMessage, setPendingPhoto, setPendingCarousel, setPendingVideo, setNotifier } = require('./claude');
 const { startTokenAutoRefresh } = require('./token-refresh');
+const {
+  isAuthorized,
+  listAuthorizedUsers,
+  removeAuthorizedUser,
+  createInvite,
+  redeemInvite
+} = require('./access');
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+let botUsername = null;
 
-function isAuthorized(userId) {
-  const allowed = (process.env.ALLOWED_TELEGRAM_USER_IDS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return allowed.includes(String(userId));
-}
-
-// Неавторизованных пользователей тихо игнорируем — не раскрываем, что бот вообще что-то делает
+// Неавторизованных пользователей тихо игнорируем — кроме команды /start с кодом-приглашением,
+// её нужно пропустить дальше, чтобы можно было получить доступ по ссылке.
 bot.use(async (ctx, next) => {
   if (ctx.from && isAuthorized(ctx.from.id)) {
+    return next();
+  }
+  if (ctx.message && ctx.message.text && ctx.message.text.startsWith('/start')) {
     return next();
   }
 });
@@ -125,8 +129,50 @@ bot.on('video', async (ctx) => {
   }
 });
 
-bot.command('start', async (ctx) => {
-  await ctx.reply('Привет! Я помогу вести Instagram HappyFlora — просто присылай фото, видео или пиши, что нужно 🌸');
+bot.start(async (ctx) => {
+  const payload = ctx.startPayload;
+
+  if (payload) {
+    if (isAuthorized(ctx.from.id)) {
+      await ctx.reply('Привет! У тебя уже есть доступ 🌸');
+      return;
+    }
+    const result = redeemInvite(payload, ctx.from.id, ctx.from.first_name);
+    if (result.success) {
+      await ctx.reply(`Добро пожаловать, ${ctx.from.first_name || ''}! Теперь у тебя есть доступ к ассистенту HappyFlora 🌸`);
+      return;
+    }
+    await ctx.reply('Эта ссылка-приглашение недействительна или уже использована. Попроси новую у того, кто её присылал.');
+    return;
+  }
+
+  if (isAuthorized(ctx.from.id)) {
+    await ctx.reply('Привет! Я помогу вести Instagram HappyFlora — просто присылай фото, видео или пиши, что нужно 🌸');
+  }
+  // Неавторизованным без кода-приглашения — молчим, не раскрываем существование бота
+});
+
+bot.command('invite', async (ctx) => {
+  const code = createInvite(ctx.from.id);
+  const link = `https://t.me/${botUsername}?start=${code}`;
+  await ctx.reply(`Ссылка-приглашение (действует 24 часа, одноразовая):\n${link}\n\nПросто отправь её человеку — он нажмёт и сразу получит доступ, ничего вводить не нужно.`);
+});
+
+bot.command('users', async (ctx) => {
+  const users = listAuthorizedUsers();
+  const lines = users.map((u) => `• ${u.name || 'без имени'} (id: ${u.id})`).join('\n');
+  await ctx.reply(`Сейчас доступ есть у:\n${lines || '(никого)'}`);
+});
+
+bot.command('remove', async (ctx) => {
+  const parts = ctx.message.text.split(' ');
+  const targetId = parts[1];
+  if (!targetId) {
+    await ctx.reply('Использование: /remove <telegram_id> (id можно посмотреть через /users)');
+    return;
+  }
+  removeAuthorizedUser(targetId);
+  await ctx.reply(`Доступ для ${targetId} отозван.`);
 });
 
 bot.on('text', async (ctx) => {
@@ -151,24 +197,20 @@ setNotifier(async (chatId, text) => {
   await bot.telegram.sendMessage(chatId, text);
 });
 
-function getAllowedUserIds() {
-  return (process.env.ALLOWED_TELEGRAM_USER_IDS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 async function notifyAllAuthorized(text) {
-  const ids = getAllowedUserIds();
-  for (const id of ids) {
+  const users = listAuthorizedUsers();
+  for (const user of users) {
     // eslint-disable-next-line no-await-in-loop
-    await bot.telegram.sendMessage(id, text).catch((err) => {
-      console.error(`Не удалось отправить уведомление пользователю ${id}:`, err.message);
+    await bot.telegram.sendMessage(user.id, text).catch((err) => {
+      console.error(`Не удалось отправить уведомление пользователю ${user.id}:`, err.message);
     });
   }
 }
 
 async function startBot() {
+  const me = await bot.telegram.getMe();
+  botUsername = me.username;
+
   await bot.launch();
   console.log('⚡️ Telegram-бот запущен и слушает сообщения!');
 
