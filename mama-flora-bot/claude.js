@@ -5,7 +5,8 @@ const {
   publishReel,
   publishStory,
   getAccountInsights,
-  getRecentMediaWithInsights
+  getRecentMediaWithInsights,
+  searchAudio
 } = require('./instagram');
 const { uploadImageAndGetPublicUrl, uploadVideoAndGetPublicUrl } = require('./cloudinary-upload');
 
@@ -81,18 +82,20 @@ ${describePendingMedia(chatId)}
 - Если пользователь спрашивает про статистику, подписчиков, охваты — вызови get_instagram_stats и перескажи результат живым языком, не просто цифрами.
 - Если пользователь сообщает важный долгосрочный факт о магазине (новый адрес, акция, изменение цен, новая услуга) — вызови remember_shop_fact.
 - Если для действия (публикации) нет ожидающего фото/видео — прямо скажи об этом и попроси прислать медиа, никогда не выдумывай, что медиа нет, если оно указано как ожидающее выше.
+- Если публикуешь видео как Reels (не Stories) — можешь указать music_query: если пользователь описал настроение/жанр/артиста для музыки, передай эти ключевые слова; если ничего не просил про музыку — оставь music_query пустым, тогда будет автоматически подобрана трендовая музыка. Оригинальный звук видео при этом всегда убирается, чтобы не было двух наложенных звуков.
 - Никогда не публикуй без явного подтверждения пользователя в этом разговоре.`;
 }
 
 const tools = [
   {
     name: 'publish_post',
-    description: 'Опубликовать текущее ожидающее фото/видео/карусель в Instagram прямо сейчас — как обычный пост в ленте или как историю (Stories).',
+    description: 'Опубликовать текущее ожидающее фото/видео/карусель в Instagram прямо сейчас — как обычный пост в ленте, Reels или как историю (Stories).',
     input_schema: {
       type: 'object',
       properties: {
         caption: { type: 'string', description: 'Финальный текст подписи для публикации. Для историй (is_story=true) можно передать пустую строку.' },
-        is_story: { type: 'boolean', description: 'true — опубликовать как историю (Stories), false — как обычный пост в ленте/Reels.' }
+        is_story: { type: 'boolean', description: 'true — опубликовать как историю (Stories), false — как обычный пост в ленте/Reels.' },
+        music_query: { type: 'string', description: 'Только для видео (Reels): ключевые слова настроения/жанра музыки, если пользователь их указал. Если не указал — не передавай это поле, будет подобрана трендовая музыка автоматически.' }
       },
       required: ['caption', 'is_story']
     }
@@ -105,7 +108,8 @@ const tools = [
       properties: {
         caption: { type: 'string', description: 'Финальный текст подписи.' },
         is_story: { type: 'boolean' },
-        scheduled_time_minsk: { type: 'string', description: 'Точное время публикации в ISO 8601 со смещением +03:00, например 2026-09-15T10:00:00+03:00.' }
+        scheduled_time_minsk: { type: 'string', description: 'Точное время публикации в ISO 8601 со смещением +03:00, например 2026-09-15T10:00:00+03:00.' },
+        music_query: { type: 'string', description: 'Только для видео (Reels): ключевые слова настроения/жанра музыки, если пользователь их указал.' }
       },
       required: ['caption', 'is_story', 'scheduled_time_minsk']
     }
@@ -126,7 +130,7 @@ const tools = [
   }
 ];
 
-async function executePublishAction(brand, chatId, { caption, is_story }) {
+async function executePublishAction(brand, chatId, { caption, is_story, music_query }) {
   const pending = pendingMediaByChat.get(chatId);
   if (!pending) {
     return { success: false, message: 'Нет ожидающего фото или видео для публикации. Нужно сначала прислать медиа.' };
@@ -149,15 +153,22 @@ async function executePublishAction(brand, chatId, { caption, is_story }) {
     }
 
     if (pending.type === 'video') {
-      const videoUrl = await uploadVideoAndGetPublicUrl(pending.base64, pending.mimetype, 'full');
       if (is_story) {
+        const videoUrl = await uploadVideoAndGetPublicUrl(pending.base64, pending.mimetype, 'full');
         await publishStory(brand, { videoUrl });
         pendingMediaByChat.delete(chatId);
         return { success: true, message: 'Видео опубликовано в Stories.' };
       }
-      const result = await publishReel(brand, { videoUrl, caption });
+
+      // Reels: убираем родной звук и подбираем музыку (по запросу или трендовую)
+      const audioResults = await searchAudio(brand, { audioType: 'music', searchQuery: music_query || undefined });
+      const audioId = audioResults[0]?.id || null;
+
+      const videoUrl = await uploadVideoAndGetPublicUrl(pending.base64, pending.mimetype, 'full', { muteAudio: true });
+      const result = await publishReel(brand, { videoUrl, caption, audioId });
       pendingMediaByChat.delete(chatId);
-      return { success: true, message: `Reels опубликован: ${result.permalink}` };
+      const musicNote = audioId ? '' : ' (не удалось подобрать музыку — Reels опубликован без звука)';
+      return { success: true, message: `Reels опубликован: ${result.permalink}${musicNote}` };
     }
 
     // одиночное фото
@@ -176,7 +187,7 @@ async function executePublishAction(brand, chatId, { caption, is_story }) {
   }
 }
 
-function executeScheduleAction(brand, chatId, { caption, is_story, scheduled_time_minsk }) {
+function executeScheduleAction(brand, chatId, { caption, is_story, scheduled_time_minsk, music_query }) {
   const targetDate = new Date(scheduled_time_minsk);
   if (Number.isNaN(targetDate.getTime())) {
     return { success: false, message: 'Не удалось распознать дату/время. Нужен ISO 8601, например 2026-09-15T10:00:00+03:00.' };
@@ -196,7 +207,7 @@ function executeScheduleAction(brand, chatId, { caption, is_story, scheduled_tim
 
   setTimeout(async () => {
     pendingMediaByChat.set(chatId, pending);
-    const result = await executePublishAction(brand, chatId, { caption, is_story });
+    const result = await executePublishAction(brand, chatId, { caption, is_story, music_query });
     if (notifier) {
       const text = result.success
         ? `✅ Запланированный пост опубликован!\n${result.message}`
