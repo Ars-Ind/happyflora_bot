@@ -32,16 +32,19 @@ async function uploadImageAndGetPublicUrl(base64Data, mimetype, format = 'feed')
   return result.secure_url;
 }
 
-async function uploadVideoAndGetPublicUrl(base64Data, mimetype, format = 'full') {
+async function uploadVideoAndGetPublicUrl(base64Data, mimetype, format = 'full', { muteAudio = false } = {}) {
   assertConfigured();
   const mime = mimetype || 'video/mp4';
   const dataUri = `data:${mime};base64,${base64Data}`;
   const { width, height } = FORMATS[format] || FORMATS.full;
 
+  const transformation = { width, height, crop: 'fill', gravity: 'auto' };
+  if (muteAudio) transformation.audio_codec = 'none';
+
   const result = await cloudinary.uploader.upload(dataUri, {
     folder: 'mama-flora-bot',
     resource_type: 'video',
-    transformation: [{ width, height, crop: 'fill', gravity: 'auto' }]
+    transformation: [transformation]
   });
   return result.secure_url;
 }
