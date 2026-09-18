@@ -11,7 +11,7 @@ function getInstagramToken(brand) {
   return token;
 }
 
-async function createMediaContainer(brand, { imageUrl, caption, isReel = false, videoUrl = null }) {
+async function createMediaContainer(brand, { imageUrl, caption, isReel = false, videoUrl = null, audioId = null }) {
   const accessToken = getInstagramToken(brand);
   const igUserId = brand.instagram.userId;
 
@@ -20,6 +20,9 @@ async function createMediaContainer(brand, { imageUrl, caption, isReel = false, 
   if (isReel && videoUrl) {
     params.append('media_type', 'REELS');
     params.append('video_url', videoUrl);
+    if (audioId) {
+      params.append('audio_configuration', JSON.stringify({ audio_id: audioId }));
+    }
   } else {
     params.append('media_type', 'IMAGE');
     params.append('image_url', imageUrl);
@@ -35,6 +38,22 @@ async function createMediaContainer(brand, { imageUrl, caption, isReel = false, 
     throw new Error(`Ошибка создания контейнера: ${data.error.message}`);
   }
   return data.id;
+}
+
+// Поиск музыки/звуков Instagram для Reels. Без searchQuery — вернёт трендовые треки.
+async function searchAudio(brand, { audioType = 'music', searchQuery } = {}) {
+  const accessToken = getInstagramToken(brand);
+  const igUserId = brand.instagram.userId;
+  const params = new URLSearchParams({ audio_type: audioType, user_id: igUserId, access_token: accessToken });
+  if (searchQuery) params.append('search_query', searchQuery);
+
+  const response = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/ig_audio?${params.toString()}`);
+  const data = await response.json();
+  if (data.error) {
+    console.error('Ошибка поиска аудио:', JSON.stringify(data.error));
+    return [];
+  }
+  return data.data || [];
 }
 
 async function checkContainerStatus(brand, containerId) {
@@ -133,8 +152,8 @@ async function publishCarousel(brand, { imageUrls, caption }) {
   return { mediaId, permalink };
 }
 
-async function publishReel(brand, { videoUrl, caption }) {
-  const containerId = await createMediaContainer(brand, { caption, isReel: true, videoUrl });
+async function publishReel(brand, { videoUrl, caption, audioId = null }) {
+  const containerId = await createMediaContainer(brand, { caption, isReel: true, videoUrl, audioId });
   await waitForContainerReady(brand, containerId, 180000);
   const mediaId = await publishContainer(brand, containerId);
   const permalink = await getPostPermalink(brand, mediaId);
@@ -220,5 +239,6 @@ module.exports = {
   publishReel,
   publishStory,
   getAccountInsights,
-  getRecentMediaWithInsights
+  getRecentMediaWithInsights,
+  searchAudio
 };
