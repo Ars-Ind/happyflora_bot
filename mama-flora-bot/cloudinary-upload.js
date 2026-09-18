@@ -38,7 +38,9 @@ async function uploadVideoAndGetPublicUrl(base64Data, mimetype, format = 'full',
   const dataUri = `data:${mime};base64,${base64Data}`;
   const { width, height } = FORMATS[format] || FORMATS.full;
 
-  const transformation = { width, height, crop: 'fill', gravity: 'auto' };
+  // Для видео "умная" обрезка по объекту (gravity: auto) недоступна как обычная
+  // трансформация при загрузке — только для фото. Используем надёжную центральную обрезку.
+  const transformation = { width, height, crop: 'fill', gravity: 'center' };
   if (muteAudio) transformation.audio_codec = 'none';
 
   const result = await cloudinary.uploader.upload(dataUri, {
