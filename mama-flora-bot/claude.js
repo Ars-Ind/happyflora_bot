@@ -1,4 +1,4 @@
-const { loadHistory, saveHistory, getShopFacts, addShopFact } = require('./memory');
+const { loadHistory, saveHistory, getShopFacts, addShopFact, markPostPublished } = require('./memory');
 const {
   publishPhoto,
   publishCarousel,
@@ -83,6 +83,8 @@ ${describePendingMedia(chatId)}
 - Если пользователь сообщает важный долгосрочный факт о магазине (новый адрес, акция, изменение цен, новая услуга) — вызови remember_shop_fact.
 - Если для действия (публикации) нет ожидающего фото/видео — прямо скажи об этом и попроси прислать медиа, никогда не выдумывай, что медиа нет, если оно указано как ожидающее выше.
 - Если публикуешь видео как Reels (не Stories) — можешь указать music_query: если пользователь описал настроение/жанр/артиста для музыки, передай эти ключевые слова; если ничего не просил про музыку — оставь music_query пустым, тогда будет автоматически подобрана трендовая музыка. Оригинальный звук видео при этом всегда убирается, чтобы не было двух наложенных звуков.
+- Хэштеги подбирай каждый раз заново и по-разному — не повторяй один и тот же набор из поста в пост, варьируй, оставаясь в тему бренда, Минска и цветочной ниши. Инстаграм слегка занижает охват за точное повторение одинаковых хэштегов.
+- Если тебя попросят проанализировать конкурентов — честно скажи, что у тебя нет доступа к чужим аккаунтам через API Instagram (Meta это не даёт по соображениям приватности), и предложи подбирать хэштеги/темы на основе общих знаний о нише, а не реального разбора конкретных конкурентов.
 - Никогда не публикуй без явного подтверждения пользователя в этом разговоре.`;
 }
 
@@ -149,6 +151,7 @@ async function executePublishAction(brand, chatId, { caption, is_story, music_qu
       }
       const result = await publishCarousel(brand, { imageUrls, caption });
       pendingMediaByChat.delete(chatId);
+      markPostPublished(brand.id);
       return { success: true, message: `Карусель опубликована: ${result.permalink}` };
     }
 
@@ -167,6 +170,7 @@ async function executePublishAction(brand, chatId, { caption, is_story, music_qu
       const videoUrl = await uploadVideoAndGetPublicUrl(pending.base64, pending.mimetype, 'full', { muteAudio: true });
       const result = await publishReel(brand, { videoUrl, caption, audioId });
       pendingMediaByChat.delete(chatId);
+      markPostPublished(brand.id);
       const musicNote = audioId ? '' : ' (не удалось подобрать музыку — Reels опубликован без звука)';
       return { success: true, message: `Reels опубликован: ${result.permalink}${musicNote}` };
     }
@@ -180,6 +184,7 @@ async function executePublishAction(brand, chatId, { caption, is_story, music_qu
     }
     const result = await publishPhoto(brand, { imageUrl, caption });
     pendingMediaByChat.delete(chatId);
+    markPostPublished(brand.id);
     return { success: true, message: `Опубликовано: ${result.permalink}` };
   } catch (err) {
     console.error('Ошибка публикации:', err);

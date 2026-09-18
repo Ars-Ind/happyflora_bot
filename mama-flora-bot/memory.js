@@ -57,9 +57,44 @@ function saveHistory(chatId, history) {
   return trimmed;
 }
 
+// --- Активность публикаций (для напоминаний "давно не постили") ---
+
+function activityPath(brandId) {
+  return path.join(DATA_DIR, `activity-${brandId}.json`);
+}
+
+function loadActivity(brandId) {
+  const filePath = activityPath(brandId);
+  if (!fs.existsSync(filePath)) return { lastPostAt: null, lastReminderAt: null };
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (err) {
+    return { lastPostAt: null, lastReminderAt: null };
+  }
+}
+
+function saveActivity(brandId, activity) {
+  fs.writeFileSync(activityPath(brandId), JSON.stringify(activity, null, 2), 'utf8');
+}
+
+function markPostPublished(brandId) {
+  const activity = loadActivity(brandId);
+  activity.lastPostAt = new Date().toISOString();
+  saveActivity(brandId, activity);
+}
+
+function markReminderSent(brandId) {
+  const activity = loadActivity(brandId);
+  activity.lastReminderAt = new Date().toISOString();
+  saveActivity(brandId, activity);
+}
+
 module.exports = {
   getShopFacts,
   addShopFact,
   loadHistory,
-  saveHistory
+  saveHistory,
+  loadActivity,
+  markPostPublished,
+  markReminderSent
 };

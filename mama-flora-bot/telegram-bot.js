@@ -2,6 +2,7 @@ const { Telegraf } = require('telegraf');
 const { getBrandById } = require('./brands');
 const { handleIncomingMessage, setPendingPhoto, setPendingCarousel, setPendingVideo, setNotifier } = require('./claude');
 const { startTokenAutoRefresh } = require('./token-refresh');
+const { startInactivityReminders } = require('./reminders');
 const {
   isAuthorized,
   listAuthorizedUsers,
@@ -217,6 +218,7 @@ async function startBot() {
   const brand = getBrandById('happyflora');
   if (brand) {
     startTokenAutoRefresh(brand, notifyAllAuthorized);
+    startInactivityReminders(brand, notifyAllAuthorized);
   }
 }
 
