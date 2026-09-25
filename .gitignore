@@ -1,0 +1,10 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data (users, invites, chat history, tokens)
+data/
+
+# Dependencies
+node_modules/
